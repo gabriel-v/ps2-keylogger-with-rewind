@@ -13,7 +13,7 @@ simple.lss: simple.elf
 	avr-objdump -t -h -S -C $^ > $@
 
 upload: simple.hex
-	sudo bootloadHID simple.hex
+	sudo bootloadHID -r simple.hex
 
 clean:
 	rm -rf simple.elf simple.hex simple.lss
