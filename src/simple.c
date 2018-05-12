@@ -139,6 +139,31 @@ void ps2puts(const char *str)
 	}
 }
 
+#define BUFSIZE 1024
+volatile int pos_input = 0;
+volatile int pos_output = 0;
+unsigned char buffer[BUFSIZE];
+
+void queue_put(unsigned char data)
+{
+	// TODO use hardware memory
+	buffer[pos_input % BUFSIZE] = data;
+	pos_input++;
+}
+
+char queue_empty(void)
+{
+	return pos_input == pos_output;
+}
+
+unsigned char queue_get(void)
+{
+	unsigned char x = buffer[pos_output % BUFSIZE];
+	pos_output++;
+	return x;
+}
+
+
 #define BUTTON_DDR DDRD
 #define BUTTON_PORT PORTD
 #define BUTTON_PIN 6
@@ -149,10 +174,10 @@ void ps2puts(const char *str)
 #define LED_PIN 7
 #define LED_INPUT PIND
 
-unsigned char data, bitcount = 11;
 
 ISR(PCINT1_vect)
 {
+	static unsigned char data, bitcount = 11;
 	//if (IN_CLOCK_INPUT & _BV(IN_CLOCK_PIN)) {
 	//      out_clock_high();
 	//} else {
@@ -173,7 +198,7 @@ ISR(PCINT1_vect)
 				data = data & 0x7f;
 		}
 		if (--bitcount == 0) {	// all bits received ?      
-			ps2write(data);	// decode received byte
+			queue_put(data);
 			bitcount = 11;	// reset bit counter    
 		}
 	}
@@ -194,11 +219,17 @@ int main()
 	sei();
 
 	while (1) {
-		LED_PORT ^= _BV(LED_PIN);
-		if (button_pressed()) {
-			ps2puts("\x4d\x4b\x3a\x5a");
+		if (!queue_empty()) {
+			unsigned char x = queue_get();
+			while(ps2write(x));
+			LED_PORT ^= _BV(LED_PIN);
 		}
-		_delay_ms(200);
+
+		if (button_pressed()) {
+			LED_PORT ^= _BV(LED_PIN);
+			ps2puts("\x4d\x4b\x3a\x5a");
+			_delay_ms(200);
+		}
 	}
 
 	return 1;
