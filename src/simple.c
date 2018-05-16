@@ -142,13 +142,24 @@ void ps2puts(const char *str)
 #define BUFSIZE 1024
 volatile int pos_input = 0;
 volatile int pos_output = 0;
+volatile int total_count = 0;
 unsigned char buffer[BUFSIZE];
+
+volatile int clk_time;
 
 void queue_put(unsigned char data)
 {
 	// TODO use hardware memory
 	buffer[pos_input % BUFSIZE] = data;
 	pos_input++;
+	if (total_count < BUFSIZE / 2 - 1)
+		total_count++;
+}
+
+void queue_rewind()
+{
+	pos_output -= total_count;
+	total_count = 0;
 }
 
 char queue_empty(void)
@@ -174,6 +185,7 @@ unsigned char queue_get(void)
 #define LED_PIN 7
 #define LED_INPUT PIND
 
+volatile int time_since_last_clk = 0;
 
 ISR(PCINT1_vect)
 {
@@ -190,6 +202,11 @@ ISR(PCINT1_vect)
 	//      out_data_low();
 	//}
 	if (!(IN_CLOCK_INPUT & _BV(IN_CLOCK_PIN))) {
+		if (time_since_last_clk > (CLK_FULL * 2 - CLK_HALF)) {
+			bitcount = 11;
+		}
+		time_since_last_clk = 0;
+
 		if ((bitcount < 11) && (bitcount > 2)) {
 			data = (data >> 1);
 			if (in_read_data())
@@ -225,11 +242,15 @@ int main()
 			LED_PORT ^= _BV(LED_PIN);
 		}
 
-		if (button_pressed()) {
+		if (button_pressed() && total_count > 0) {
 			LED_PORT ^= _BV(LED_PIN);
-			ps2puts("\x4d\x4b\x3a\x5a");
-			_delay_ms(200);
+			//ps2puts("\x5a\x4d\x4b\x3a\x5a"); // \nplm\n
+			ps2puts("\x5a"); // \n
+			ps2puts("\x5a"); // \n
+			queue_rewind();
 		}
+		_delay_us(1);
+		time_since_last_clk++;
 	}
 
 	return 1;
